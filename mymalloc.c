@@ -4,10 +4,10 @@
 
 #define SIZE 8192
 
+#define DBG 0
+
 /* Global variable for storing the beginning of the free list */
 void* malloc_h = NULL;
-
-#define DBG 0
 
 typedef struct flist  {
 	int size;
@@ -139,7 +139,7 @@ void my_free(void *ptr){
 
 	/* Otherwise find ptr's proper place */
 	fc = fc->blink;		/* Go to the end of the free list */
-	if(DBG == 1) printf("TEMP - fc is 0x%x fc->flink is 0x%x ptr is 0x%x malloc_h is 0x%x\n", fc, fc->flink, ptr, malloc_h);
+	if(DBG == 1) printf("TEMP - fc is 0x%x fc->flink is 0x%x fc->blink is 0x%x ptr is 0x%x malloc_h is 0x%x\n", fc, fc->flink, fc->blink, ptr, malloc_h);
 	while(fc != NULL){
 		if((((void*) fc) < ptr) && (((void*) fc->flink) > ptr || ((void*) fc->flink == malloc_h))){
 			if(DBG == 1) printf("TEMP - Found location where ptr belongs\n");
@@ -195,6 +195,7 @@ void* findFreeChunk(size_t size){
 		else{
 			old = f;
 			f = (Flist) free_list_next((void*) f);
+			
 			if(f == old){ 
 				printf("f is %#x\n", f);
 				exit(1);
@@ -234,7 +235,7 @@ void freeListAppend(void* ptr, Flist fc){
 	f = (Flist) ptr;
 
 	f->flink = fc->flink;
-	f->blink = fc->flink->blink;
+	f->blink = fc;
 	fc->flink->blink = ptr;
 	fc->flink = ptr;
 }
@@ -255,7 +256,7 @@ void freeListDelete(Flist f){
 	}
 	else{
 		f->flink->blink = f->blink;
-		f->blink->flink = f->blink;
+		f->blink->flink = f->flink;
 	}
 }
 
@@ -265,7 +266,7 @@ Flist allocateBlock(Flist f, size_t size){
 		a = f;
 		a->size = f->size;
 		freeListDelete(f);
-		if(DBG == 1) printf("TEMP - Removed entry from free list\n");
+		if(DBG == 1) printf("TEMP - Removed entry %#x from free list\n", f);
 	}
 	else{
 		a = (Flist) (((void*) f) + (f->size - size));
