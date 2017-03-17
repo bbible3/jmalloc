@@ -7,6 +7,8 @@
 /* Global variable for storing the beginning of the free list */
 void* malloc_h = NULL;
 
+#define DBG 0
+
 typedef struct flist  {
 	int size;
 	struct flist *flink;
@@ -20,74 +22,6 @@ void freeListAppend(void* ptr, Flist fc);
 void freeListPrepend(void* ptr, Flist fc);
 void freeListDelete(Flist f);
 size_t alignBy8(size_t size);
-
-/*
-void double_check_memory(int **ptrs, int *dc, int nptrs, int fl_size)
-{
-	void *low, *l;
-	void *high, *h;
-	int *ip, i;
-	int nbytes;
-	int nfl;
-
-	nbytes = 0;
-	printf("Start doublecheck\n");
-
-	for (i = 0; i < nptrs; i++) {
-		l = (void *) ptrs[i];
-		l -= 8;
-		ip = (int *) l;
-
-		if (*ip != dc[i]) {
-			printf("Error: pointer number %d the wrong size (%d instead of %d)\n", i, *ip, dc[i]);
-			exit(1);
-		}
-		h = l + *ip;
-		if (nbytes == 0 || l < low) low = l;
-		if (nbytes == 0 || h > high) high = h;
-		nbytes += *ip;
-	}
-	printf("What?\n");
-
-	nfl = 0;
-	for (l = free_list_begin(); l != NULL; l = free_list_next(l)) {
-		ip = (int *) l;
-		h = l + *ip;
-		if (nbytes == 0 || l < low) low = l;
-		if (nbytes == 0 || h > high) high = h;
-		nbytes += *ip;
-		nfl++;
-	}
-	printf("Donde\n");
-
-	if (nbytes != 8192) {
-		printf("Error: Total bytes allocated and on the free list = %d, not 8192\n", nbytes);
-		exit(0);
-	}
-	if (high - low != 8192) {
-		printf("Error: Highest address (0x%x) minus lowest (0x%x) does not equal 8192\n", (int) high, (int) low);
-		exit(0);
-	}
-
-	if (nfl != fl_size && fl_size != -1) {
-		printf("Error: %d nodes on the free list -- should be %d\n", nfl, fl_size);
-		exit(0);
-	}
-}
-
-main()
-{
-	int *ptrs[1];
-	int dc[1];
-
-	ptrs[0] = my_malloc(64);
-	printf("Done\n");
-	dc[0] = 72;
-	double_check_memory(ptrs, dc, 1, 1);
-	printf("Done 2\n");
-	printf("Correct\n");
-}
-*/
 
 /*
    int main(int argc, char **argv){
@@ -116,6 +50,7 @@ main()
 void *my_malloc(size_t size){
 	Flist f;
 	Flist a;
+	void *ptr;
 
 	size = alignBy8(size); /* Round up to the nearest multiple of 8 */
 	size += 8; /* Account for 8 bytes of book keeping */
@@ -123,27 +58,40 @@ void *my_malloc(size_t size){
 	/* Case: no free memory chunks in free list */
 	if(malloc_h == NULL){
 		malloc_h = allocateFreshChunk(size);
-		printf("TEMP - Top of heap is %#x\n", malloc_h);
+		if(DBG == 1) printf("malloc_h is %#x\n", malloc_h);
+		if(DBG == 1) printf("TEMP - Top of heap is %#x\n", malloc_h);
 		f = (Flist) malloc_h;
 		f->flink = f;
 		f->blink = f;
 		a = allocateBlock(f, size);
-		printf("TEMP - a is of size %d and is at location %#x\n", a->size, a);
-		printf("\n");
+		if(DBG == 1) printf("TEMP: my_malloc -  a is of size %d and is at location %#x\n", a->size, a);
 		return ((void*) a)+8;
 	}
 	else{
+		if(DBG == 1) printf("malloc_h is %#x\n", malloc_h);
 		f = (Flist) findFreeChunk(size);
 		if(f != NULL){
-			// printf("TEMP - Memory chunk found of size %d at location %#x\n", f->size, f);
+			if(DBG == 1) printf("TEMP - Memory chunk found of size %d at location %#x\n", f->size, f);
 			a = allocateBlock(f, size);
-			printf("TEMP - a is of size %d and is at location %#x\n", a->size, a);
-			printf("\n");
+			if(DBG == 1) printf("TEMP: my_malloc -  a is of size %d and is at location %#x\n", a->size, a);
+			return ((void*) a)+8;
+		}
+		else{
+			// if(DBG == 1) printf("Maybe this case!\n");
+			// exit(1);
+			/* Allocate a fresh chunk */
+			ptr = allocateFreshChunk(size);
+			/* Put fresh memory at end of the list */
+			if(DBG == 1) printf("PREPEND\n");
+			freeListPrepend(ptr, (Flist) malloc_h);
+			f = (Flist) ptr;
+			/* Carve off what is needed */
+			a = allocateBlock((Flist) ptr, size);
+			if(DBG == 1) printf("TEMP: my_malloc -  a is of size %d and is at location %#x\n", a->size, a);
+			if(DBG == 1) printf("malloc_h is %#x\n", malloc_h);
 			return ((void*) a)+8;
 		}
 	}
-
-
 }
 
 void my_free(void *ptr){
@@ -153,7 +101,9 @@ void my_free(void *ptr){
 
 	/* Case: Free list was empty */
 	if(malloc_h == NULL){
+		if(DBG == 1) printf("TEMP: my_free - Only entry when free'd so setting malloc_h\n");
 		malloc_h = ptr; /* Set malloc_h and link ptr to itself as sole Flist */
+		if(DBG == 1) printf("malloc_h is %#x\n", malloc_h);
 		f = (Flist) ptr;
 		f->flink = f;
 		f->blink = f;
@@ -169,7 +119,9 @@ void my_free(void *ptr){
 		}
 		else{
 			freeListPrepend(ptr, fc);
+			if(DBG == 1) printf("TEMP: my_free - Two entries; Prepended when free'd so setting malloc_h\n");
 			malloc_h = ptr; /* Update malloc_h */
+			if(DBG == 1) printf("malloc_h is %#x\n", malloc_h);
 		}
 		return;
 	}
@@ -179,19 +131,21 @@ void my_free(void *ptr){
 	 * prepend it to the free list */
 	if(ptr < malloc_h){
 		freeListPrepend(ptr, fc);
+			if(DBG == 1) printf("TEMP: my_free - Many entries; Prepended when free'd so setting malloc_h\n");
 		malloc_h = ptr;
+		if(DBG == 1) printf("malloc_h is %#x\n", malloc_h);
 		return;
 	}
 
 	/* Otherwise find ptr's proper place */
 	fc = fc->blink;		/* Go to the end of the free list */
-	printf("TEMP - fc is 0x%x fc->flink is 0x%x ptr is 0x%x malloc_h is 0x%x\n", fc, fc->flink, ptr, malloc_h);
+	if(DBG == 1) printf("TEMP - fc is 0x%x fc->flink is 0x%x ptr is 0x%x malloc_h is 0x%x\n", fc, fc->flink, ptr, malloc_h);
 	while(fc != NULL){
 		if((((void*) fc) < ptr) && (((void*) fc->flink) > ptr || ((void*) fc->flink == malloc_h))){
-			printf("TEMP - Found location where ptr belongs\n");
-			printf("TEMP - %#x < %#x < %#x\n", (unsigned int) fc->blink, (unsigned int) ptr, (unsigned int) fc->flink);
+			if(DBG == 1) printf("TEMP - Found location where ptr belongs\n");
+			if(DBG == 1) printf("TEMP - %#x < %#x < %#x\n", (unsigned int) fc->blink, (unsigned int) ptr, (unsigned int) fc->flink);
 			freeListAppend(ptr, fc);
-			break;
+			return;
 		}
 		fc = fc->blink;
 	}
@@ -208,8 +162,10 @@ void *free_list_begin(){
 
 void *free_list_next(void *node){
 	Flist f;
+	void* first;
+	first = free_list_begin();
 	f = (Flist) node;
-	if(f->flink != NULL && f->flink != free_list_begin()){
+	if(f->flink != NULL && ((void*) f->flink) != first){
 		return (void*) f->flink;
 	}
 	else{
@@ -224,21 +180,29 @@ void coalesce_free_list(){
 /* findFreeChunk looks for a chunk of free memory of at least size `size`+8
  * If no such chunk can be found, it returns NULL */
 void* findFreeChunk(size_t size){
-	Flist f;
+	Flist f, old;
 	f = (Flist) free_list_begin();
+	if(DBG == 1) printf("Free_list_begin is %#x\n", f);
 	if(f == NULL){
 		fprintf(stderr, "ERROR: findFreeChunk - Called findFreeChunk while free list was empty\n");
 		exit(1);
 	}
 
-	do {
+	while(f != NULL){
 		if(f->size >= size){
 			return (void*) f;
 		}
 		else{
+			old = f;
 			f = (Flist) free_list_next((void*) f);
+			if(f == old){ 
+				printf("f is %#x\n", f);
+				exit(1);
+			}
+			if(DBG == 1) printf("Looping f is %#x\n", f);
 		}
-	} while(f != free_list_begin());
+	}
+	if(DBG == 1) printf("None found!\n");
 	return NULL;
 }
 
@@ -246,13 +210,13 @@ void* allocateFreshChunk(size_t size){
 	void* h;
 	Flist f;
 	if(size > (SIZE-16)){
-		printf("TEMP - Called sbrk(%d)\n", size);
+		if(DBG == 1) printf("TEMP - Called sbrk(%d)\n", size);
 		h = (void*) sbrk(size);
 		f = (Flist) h;
 		f->size = size;
 	}
 	else{
-		printf("TEMP - Called sbrk(%d)\n", SIZE);
+		if(DBG == 1) printf("TEMP - Called sbrk(%d)\n", SIZE);
 		h = (void*) sbrk(SIZE);
 		f = (Flist) h;
 		f->size = SIZE;
@@ -297,11 +261,11 @@ void freeListDelete(Flist f){
 
 Flist allocateBlock(Flist f, size_t size){
 	Flist a;
-	if((f->size - size) < 12){
+	if((f->size - size) < 16){
 		a = f;
 		a->size = f->size;
 		freeListDelete(f);
-		if(malloc_h == NULL) printf("Malloc_h is NULL\n");
+		if(DBG == 1) printf("TEMP - Removed entry from free list\n");
 	}
 	else{
 		a = (Flist) (((void*) f) + (f->size - size));
