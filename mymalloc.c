@@ -174,7 +174,42 @@ void *free_list_next(void *node){
 }
 
 void coalesce_free_list(){
-	// TODO Write coalesce
+    void *ptr;
+    Flist f, fn;
+    int i;
+    // TODO Write coalesce
+    //   > If two adjacent free list entries are encountered
+    //          > Update the top free list entry to depict the fact that the lower is now part of the upper
+    //  Else continue traversal
+	if(DBG == 1){    
+		i = 0;
+		for(ptr = free_list_begin(); ptr != NULL; ptr = free_list_next(ptr)){
+			printf("%d: %#x\n", i, ptr);
+			i++;
+		}
+	}
+
+    ptr = free_list_begin();
+    // Traverse free list
+    while(ptr != NULL){
+        f = (Flist) ptr;
+        if((f->flink != ptr) && (f->flink == (ptr + f->size))){
+            fn = (Flist) f->flink;
+            f->size += fn->size;
+            freeListDelete(fn);
+        }
+        else{
+            ptr = free_list_next(ptr);
+        }
+    }
+
+	if(DBG == 1){
+		i = 0;
+		for(ptr = free_list_begin(); ptr != NULL; ptr = free_list_next(ptr)){
+			printf("%d: %#x\n", i, ptr);
+			i++;
+		}
+	}
 }
 
 /* findFreeChunk looks for a chunk of free memory of at least size `size`+8
